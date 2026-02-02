@@ -239,7 +239,7 @@
             const daysEvents = reqs.filter(r => moment(dateStr).isBetween(r.startDate, r.endDate, 'day', '[]'));
             if(daysEvents.length === 0) return;
 
-            // ★ [정렬 2차] 툴팁 목록 정렬 (유형순 -> 이름순)
+            // 정렬: 유형별 우선순위 -> 이름순
             const typePriority = { '연차': 1, '반차': 2, '조퇴': 3, '외출': 4 };
             daysEvents.sort((a, b) => {
                 const pA = typePriority[a.type] || 99;
@@ -251,12 +251,10 @@
             let html = `<div class="font-bold border-b pb-1 mb-2 text-gray-700">${moment(dateStr).format('M월 D일')} 일정</div>`;
             daysEvents.forEach(e => {
                 const displayType = (e.type === '시간차') ? '조퇴' : e.type;
-                
                 let detail = '';
                 if (displayType === '조퇴' || displayType === '외출') {
                     detail = ` <span class="text-xs text-gray-500">(${e.timeRange} / ${e.hours}h)</span>`;
                 }
-
                 const reason = e.reason ? `<div class="text-xs text-gray-400 pl-1">└ ${e.reason}</div>` : '';
                 html += `<div class="mb-1.5 last:mb-0"><span class="font-bold text-gray-800">${e.userName}</span><span class="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-600 ml-1">${displayType}</span>${detail}${reason}</div>`;
             });
@@ -309,6 +307,10 @@
             document.getElementById('req-end-date').value = req.endDate;
             document.getElementById('req-reason').value = req.reason;
 
+            // 수정 모드일 때 기간인지 확인하여 토글 설정
+            const isMulti = req.startDate !== req.endDate;
+            document.getElementById('is-multi-day').checked = isMulti;
+
             if (req.type === '조퇴' || req.type === '외출') {
                 const parts = req.timeRange.split('~');
                 if(parts.length === 2) {
@@ -335,9 +337,11 @@
         submitRequest: async () => {
             const type = document.getElementById('req-type').value;
             const sDate = document.getElementById('req-start-date').value;
-            let eDate = document.getElementById('req-end-date').value;
+            // 토글 상태에 따라 종료일 결정
+            const isMultiDay = document.getElementById('is-multi-day').checked;
+            let eDate = isMultiDay ? document.getElementById('req-end-date').value : sDate;
+            
             const reason = document.getElementById('req-reason').value;
-            if(type!=='연차') eDate = sDate;
             if(!sDate) return alert('날짜를 선택하세요');
             
             let hours = 0, timeRange = '';
@@ -476,7 +480,7 @@
             const lastDate = new Date(year, month + 1, 0).getDate();
             for(let i=0; i<firstDayIdx; i++) html += `<div class="calendar-cell bg-gray-50/50"></div>`;
             
-            // ★ [정렬 1차] 연차 유형별 우선순위 설정
+            // ★ [정렬] 연차 유형별 우선순위 설정
             const typePriority = { '연차': 1, '반차': 2, '조퇴': 3, '외출': 4 };
 
             for(let d=1; d<=lastDate; d++) {
@@ -487,12 +491,12 @@
                 const applyShading = isPast && app.showPastShading;
                 const evts = viewReqs.filter(r => curDate.isBetween(r.startDate, r.endDate, 'day', '[]'));
                 
-                // ★ [정렬 1차] 캘린더 내부 정렬 (유형순 -> 이름순)
+                // ★ [정렬 적용] 유형순 -> 이름순
                 evts.sort((a, b) => {
                     const pA = typePriority[a.type] || 99;
                     const pB = typePriority[b.type] || 99;
-                    if (pA !== pB) return pA - pB; // 1차: 유형순
-                    return a.userName.localeCompare(b.userName, 'ko'); // 2차: 이름순
+                    if (pA !== pB) return pA - pB;
+                    return a.userName.localeCompare(b.userName, 'ko');
                 });
 
                 const isRed = holidayLogic.isRedDay(dateStr);
@@ -510,18 +514,11 @@
                     } else if (isMe) {
                         className += 'bg-indigo-600 text-white font-black border-indigo-800';
                     } else {
-                        // ★ [색상 변경] 연두/주황/노랑/황토
-                        if(e.type === '연차') className += 'bg-blue-100 text-blue-800 border-blue-500'; // 요청: 눈에 확 띄게 (Blue로 변경 제안 드렸으나, '연차는 연두색' 요청하심 -> Lime으로 변경)
-                        // 아차, '연차는 눈에 확띄는게 좋겠고' + '연차는 연두색' 요청이 섞임.
-                        // 사용자의 마지막 명시적 요청: "연차는 연두색"
-                        // 하지만 그 뒤에 "눈에 확 띄는게 좋겠고 색 추천해줘" 라고 함.
-                        // 추천: 연차(Blue)가 가장 잘 보임. 하지만 "연두색"을 원하셨으므로 Lime-300 정도의 진한 연두를 쓰겠습니다.
-                        // 다시 보니 "색상변경. 연차는 연두색..." 이라고 명시함.
-                        
-                        if(e.type === '연차') className += 'bg-lime-300 text-lime-900 border-lime-600'; // 진한 연두
+                        // ★ [색상 적용] 연두/주황/노랑/황토
+                        if(e.type === '연차') className += 'bg-lime-200 text-lime-800 border-lime-600'; // 연두
                         else if(e.type === '반차') className += 'bg-orange-100 text-orange-800 border-orange-500'; // 주황
-                        else if(e.type === '조퇴' || e.type === '시간차') className += 'bg-yellow-200 text-yellow-900 border-yellow-600'; // 노랑 (가독성 위해 200)
-                        else if(e.type === '외출') className += 'bg-stone-200 text-stone-800 border-stone-500'; // 황토(Stone)
+                        else if(e.type === '조퇴' || e.type === '시간차') className += 'bg-yellow-200 text-yellow-900 border-yellow-600'; // 노랑
+                        else if(e.type === '외출') className += 'bg-stone-200 text-stone-800 border-stone-500'; // 황토
                         else className += 'bg-gray-100 text-gray-700 border-gray-500';
                     }
 
@@ -616,8 +613,9 @@
                     ${myReqs.length === 0 ? '<div class="p-8 text-center text-gray-400">신청 내역이 없습니다.</div>' : myReqs.map(r=> {
                         const displayType = (r.type === '시간차') ? '조퇴' : r.type;
                         let badgeClass = '';
+                        // ★ [변경] 관리자 화면 배지 색상 동기화
                         if(displayType === '연차') badgeClass = 'bg-lime-200 text-lime-900';
-                        else if(displayType === '반차') badgeClass = 'bg-orange-100 text-orange-800';
+                        else if(displayType === '반차') badgeClass = 'bg-orange-100 text-orange-700';
                         else if(displayType === '조퇴' || r.type === '시간차') badgeClass = 'bg-yellow-200 text-yellow-900';
                         else if(displayType === '외출') badgeClass = 'bg-stone-200 text-stone-800';
                         else badgeClass = 'bg-gray-100 text-gray-700';
@@ -665,7 +663,7 @@
 
         getModal: () => {
             const timeOpts = makeTimeOptions();
-            return `<div id="req-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden flex justify-center items-center z-50 fade-in"><div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl transform scale-100"><div class="flex justify-between items-center mb-6 border-b pb-2"><h3 class="font-bold text-xl text-gray-800" id="req-modal-title">연차 신청</h3><div class="flex items-center"><label class="inline-flex items-center cursor-pointer"><input type="checkbox" id="allow-past" class="sr-only peer" onchange="app.togglePastDates()"><div class="relative w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div><span class="ms-2 text-xs font-medium text-gray-500">지난 날짜 선택</span></label></div></div><div class="space-y-4 mb-6"><div><label class="block text-xs font-bold text-gray-500 mb-1">종류</label><select id="req-type" class="w-full bg-gray-50 border p-2.5 rounded-lg" onchange="toggleInputs()"><option value="연차">연차</option><option value="반차">반차 (4시간)</option><option value="조퇴">조퇴 (1~7시간)</option><option value="외출">외출</option></select></div><div id="div-date-range"><label class="block text-xs font-bold text-gray-500 mb-1">기간</label><div class="flex gap-2"><input type="date" id="req-start-date" onchange="toggleInputs()" class="w-full bg-gray-50 border p-2.5 rounded-lg"><input type="date" id="req-end-date" class="w-full bg-gray-50 border p-2.5 rounded-lg"></div></div><div id="div-timeoff" class="hidden bg-indigo-50 p-3 rounded-lg border border-indigo-100"><div class="flex gap-2 mb-2"><div class="w-1/2"><label class="text-xs font-bold text-indigo-700">사용 시간</label><select id="req-duration-timeoff" class="w-full border p-1 rounded mt-1"><option value="1">1시간</option><option value="2">2시간</option><option value="3">3시간</option><option value="4">4시간</option><option value="5">5시간</option><option value="6">6시간</option><option value="7">7시간</option></select></div><div class="w-1/2"><label class="text-xs font-bold text-indigo-700">퇴근 시간</label><select id="req-end-time-timeoff" class="w-full border p-1 rounded mt-1"><option value="18">18:00</option><option value="17">17:00</option><option value="16">16:00</option></select></div></div><p class="text-[10px] text-indigo-600">* 퇴근 시간을 기준으로 역산</p></div><div id="div-out" class="hidden bg-emerald-50 p-3 rounded-lg border border-emerald-100"><div class="flex gap-2"><div class="w-1/2"><label class="text-xs font-bold text-emerald-700">시작</label><select id="req-start-time-out" class="w-full border p-1 rounded mt-1">${timeOpts}</select></div><div class="w-1/2"><label class="text-xs font-bold text-emerald-700">종료</label><select id="req-end-time-out" class="w-full border p-1 rounded mt-1">${timeOpts}</select></div></div></div><div><label class="block text-xs font-bold text-gray-500 mb-1">사유</label><select id="req-reason" class="w-full bg-gray-50 border p-2.5 rounded-lg"><option value="Refresh">Refresh</option><option value="병원(본인)">병원(본인)</option><option value="병원(가족)">병원(가족)</option><option value="가사">가사</option><option value="은행">은행</option><option value="여행">여행</option><option value="건강검진(유급)">건강검진(유급)</option><option value="건강검진(무급)">건강검진(무급)</option></select></div></div><div class="flex justify-end gap-2"><button onclick="document.getElementById('req-modal').classList.add('hidden')" class="bg-gray-100 px-5 py-2.5 rounded-lg font-bold">취소</button><button onclick="app.submitRequest()" id="req-modal-btn" class="bg-indigo-600 text-white px-5 py-2.5 rounded-lg font-bold shadow-lg">신청하기</button></div></div></div><div id="pw-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden flex justify-center items-center z-50 fade-in"><div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl"><h3 class="font-bold text-xl mb-6 border-b pb-2">비밀번호 변경</h3><div class="space-y-4 mb-6"><div><label class="block text-xs font-bold text-gray-500 mb-1">현재 비번</label><input type="password" id="pw-current" class="w-full bg-gray-50 border p-3 rounded-lg"></div><div><label class="block text-xs font-bold text-gray-500 mb-1">새 비번</label><input type="password" id="pw-new" class="w-full bg-gray-50 border p-3 rounded-lg"></div><div><label class="block text-xs font-bold text-gray-500 mb-1">비번 확인</label><input type="password" id="pw-confirm" class="w-full bg-gray-50 border p-3 rounded-lg"></div></div><div class="flex justify-end gap-2"><button onclick="document.getElementById('pw-modal').classList.add('hidden')" class="bg-gray-100 px-5 py-2.5 rounded-lg font-bold">취소</button><button onclick="app.changePassword()" class="bg-indigo-600 text-white px-5 py-2.5 rounded-lg font-bold shadow-lg">변경</button></div></div></div>`;
+            return `<div id="req-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden flex justify-center items-center z-50 fade-in"><div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl transform scale-100"><div class="flex justify-between items-center mb-6 border-b pb-2"><h3 class="font-bold text-xl text-gray-800" id="req-modal-title">연차 신청</h3><div class="flex items-center"><label class="inline-flex items-center cursor-pointer"><input type="checkbox" id="allow-past" class="sr-only peer" onchange="app.togglePastDates()"><div class="relative w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div><span class="ms-2 text-xs font-medium text-gray-500">지난 날짜 선택</span></label></div></div><div class="space-y-4 mb-6"><div><label class="block text-xs font-bold text-gray-500 mb-1">종류</label><select id="req-type" class="w-full bg-gray-50 border p-2.5 rounded-lg" onchange="toggleInputs()"><option value="연차">연차</option><option value="반차">반차 (4시간)</option><option value="조퇴">조퇴 (1~7시간)</option><option value="외출">외출</option></select></div><div id="div-date-range"><div class="flex justify-between items-center mb-1"><label class="block text-xs font-bold text-gray-500">날짜</label><label class="inline-flex items-center cursor-pointer"><span class="mr-2 text-xs text-gray-500">기간 설정</span><input type="checkbox" id="is-multi-day" class="sr-only peer" onchange="toggleInputs()"><div class="relative w-9 h-5 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-indigo-600"></div></label></div><div class="flex gap-2"><input type="date" id="req-start-date" onchange="toggleInputs()" class="w-full bg-gray-50 border p-2.5 rounded-lg"><input type="date" id="req-end-date" class="w-full bg-gray-50 border p-2.5 rounded-lg"></div></div><div id="div-timeoff" class="hidden bg-indigo-50 p-3 rounded-lg border border-indigo-100"><div class="flex gap-2 mb-2"><div class="w-1/2"><label class="text-xs font-bold text-indigo-700">사용 시간</label><select id="req-duration-timeoff" class="w-full border p-1 rounded mt-1"><option value="1">1시간</option><option value="2">2시간</option><option value="3">3시간</option><option value="4">4시간</option><option value="5">5시간</option><option value="6">6시간</option><option value="7">7시간</option></select></div><div class="w-1/2"><label class="text-xs font-bold text-indigo-700">퇴근 시간</label><select id="req-end-time-timeoff" class="w-full border p-1 rounded mt-1"><option value="18">18:00</option><option value="17">17:00</option><option value="16">16:00</option></select></div></div><p class="text-[10px] text-indigo-600">* 퇴근 시간을 기준으로 역산</p></div><div id="div-out" class="hidden bg-emerald-50 p-3 rounded-lg border border-emerald-100"><div class="flex gap-2"><div class="w-1/2"><label class="text-xs font-bold text-emerald-700">시작</label><select id="req-start-time-out" class="w-full border p-1 rounded mt-1">${timeOpts}</select></div><div class="w-1/2"><label class="text-xs font-bold text-emerald-700">종료</label><select id="req-end-time-out" class="w-full border p-1 rounded mt-1">${timeOpts}</select></div></div></div><div><label class="block text-xs font-bold text-gray-500 mb-1">사유</label><select id="req-reason" class="w-full bg-gray-50 border p-2.5 rounded-lg"><option value="Refresh">Refresh</option><option value="병원(본인)">병원(본인)</option><option value="병원(가족)">병원(가족)</option><option value="가사">가사</option><option value="은행">은행</option><option value="여행">여행</option><option value="건강검진(유급)">건강검진(유급)</option><option value="건강검진(무급)">건강검진(무급)</option></select></div></div><div class="flex justify-end gap-2"><button onclick="document.getElementById('req-modal').classList.add('hidden')" class="bg-gray-100 px-5 py-2.5 rounded-lg font-bold">취소</button><button onclick="app.submitRequest()" id="req-modal-btn" class="bg-indigo-600 text-white px-5 py-2.5 rounded-lg font-bold shadow-lg">신청하기</button></div></div></div><div id="pw-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden flex justify-center items-center z-50 fade-in"><div class="bg-white rounded-2xl p-6 w-full max-w-sm shadow-2xl"><h3 class="font-bold text-xl mb-6 border-b pb-2">비밀번호 변경</h3><div class="space-y-4 mb-6"><div><label class="block text-xs font-bold text-gray-500 mb-1">현재 비번</label><input type="password" id="pw-current" class="w-full bg-gray-50 border p-3 rounded-lg"></div><div><label class="block text-xs font-bold text-gray-500 mb-1">새 비번</label><input type="password" id="pw-new" class="w-full bg-gray-50 border p-3 rounded-lg"></div><div><label class="block text-xs font-bold text-gray-500 mb-1">비번 확인</label><input type="password" id="pw-confirm" class="w-full bg-gray-50 border p-3 rounded-lg"></div></div><div class="flex justify-end gap-2"><button onclick="document.getElementById('pw-modal').classList.add('hidden')" class="bg-gray-100 px-5 py-2.5 rounded-lg font-bold">취소</button><button onclick="app.changePassword()" class="bg-indigo-600 text-white px-5 py-2.5 rounded-lg font-bold shadow-lg">변경</button></div></div></div>`;
         },
 
         initModal: () => {
@@ -682,6 +680,10 @@
             const toggle = document.getElementById('allow-past');
             if(toggle) toggle.checked = false;
             
+            // ★ [초기화] 기간 토글 초기화
+            const multiToggle = document.getElementById('is-multi-day');
+            if(multiToggle) multiToggle.checked = false;
+
             if(s && e) { 
                 s.min = today; 
                 e.min = today; 
@@ -697,14 +699,31 @@
         const sDate = document.getElementById('req-start-date');
         const eDate = document.getElementById('req-end-date');
         const allowPast = document.getElementById('allow-past')?.checked || false;
+        
+        // ★ [토글 로직] 연차일 때만 기간 설정 가능
+        const isMultiDay = document.getElementById('is-multi-day');
+        
         if (t === '연차') {
-            eDate.style.display = 'block';
-            eDate.min = allowPast ? '' : sDate.value;
-            if (!allowPast && moment(eDate.value).isBefore(sDate.value)) eDate.value = sDate.value;
+            isMultiDay.disabled = false;
+            isMultiDay.parentElement.style.opacity = '1';
+            
+            if (isMultiDay.checked) {
+                eDate.style.display = 'block';
+                eDate.min = allowPast ? '' : sDate.value;
+                if (!allowPast && moment(eDate.value).isBefore(sDate.value)) eDate.value = sDate.value;
+            } else {
+                eDate.style.display = 'none';
+                eDate.value = sDate.value;
+            }
         } else {
+            // 연차가 아니면 단일 날짜 강제
+            isMultiDay.checked = false;
+            isMultiDay.disabled = true;
+            isMultiDay.parentElement.style.opacity = '0.5';
             eDate.style.display = 'none';
             eDate.value = sDate.value;
         }
+
         document.getElementById('div-timeoff').style.display = t==='조퇴'?'block':'none';
         document.getElementById('div-out').style.display = t==='외출'?'block':'none';
     }
